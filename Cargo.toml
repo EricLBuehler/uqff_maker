@@ -1,0 +1,9 @@
+[package]
+name = "uqff_maker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.89"
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git", version = "0.3.2", features = ["cuda"] }
+tokio = "1.40.0"
