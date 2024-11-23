@@ -1,74 +1,10 @@
-#![allow(dead_code, unused_imports)]
+use std::str::FromStr;
 
 use anyhow::Result;
+use clap::Parser;
 use mistralrs::{IsqType, TextModelBuilder, VisionLoaderType, VisionModelBuilder};
 
 // Names follow the format: [name][version]-[size]-[instruct?]-[quant].uqff
-
-const TEXT_MODELS_TO_QUANTIZE: &[(&str, &str)] = &[
-    // // Gemma
-    // ("google/gemma-1.1-2b-it", "gemma1.1-2b-instruct-###.uqff"),
-    // ("google/gemma-1.1-7b-it", "gemma1.1-7b-instruct-###.uqff"),
-    // // Gemma 2
-    // ("google/gemma-2-2b-it", "gemma2-2b-instruct-###.uqff"),
-    // ("google/gemma-2-9b-it", "gemma2-9b-instruct-###.uqff"),
-    // ("google/gemma-2-27b-it", "gemma2-9b-instruct-###.uqff"),
-    // // Llama
-    // (
-    //     "meta-llama/Llama-3.2-1B-Instruct",
-    //     "llama3.2-1b-instruct-###.uqff",
-    // ),
-    // (
-    //     "meta-llama/Llama-3.2-3B-Instruct",
-    //     "llama3.2-3b-instruct-###.uqff",
-    // ),
-    // (
-    //     "meta-llama/Llama-3.1-8B-Instruct",
-    //     "llama3.1-8b-instruct-###.uqff",
-    // ),
-    // // Mistral
-    // (
-    //     "mistralai/Mistral-7B-Instruct-v0.3",
-    //     "mistral0.3-7b-instruct-###.uqff",
-    // ),
-    // (
-    //     "mistralai/Mistral-Nemo-Instruct-2407",
-    //     "mistral-nemo-2407-instruct-###.uqff",
-    // ),
-    // (
-    //     "mistralai/Mistral-Small-Instruct-2409",
-    //     "mistral-small-2409-instruct-###.uqff",
-    // ),
-    // Mixtral
-    // (
-    //     "mistralai/Mixtral-8x7B-Instruct-v0.1",
-    //     "mixtral0.1-8x7b-instruct-###.uqff",
-    // ),
-    // // Phi 3
-    // (
-    //     "microsoft/Phi-3.5-mini-instruct",
-    //     "phi3.5-mini-instruct-###.uqff",
-    // ),
-    (
-        "microsoft/Phi-3.5-MoE-instruct",
-        "phi-moe3.5-instruct-###.uqff",
-    ),
-];
-
-const VISION_MODELS_TO_QUANTIZE: &[(&str, &str, VisionLoaderType)] = &[
-    // Phi 3.5 Vision
-    (
-        "microsoft/Phi-3.5-vision-instruct",
-        "phi3.5-vision-instruct-###.uqff",
-        VisionLoaderType::Phi3V,
-    ),
-    // Llama 3.2 Vision
-    (
-        "meta-llama/Llama-3.2-11B-Vision-Instruct",
-        "llam3.2-vision-instruct-###.uqff",
-        VisionLoaderType::VLlama,
-    ),
-];
 
 const QUANTIZATIONS: &[IsqType] = &[
     IsqType::Q3K,
@@ -80,75 +16,72 @@ const QUANTIZATIONS: &[IsqType] = &[
     IsqType::F8E4M3,
 ];
 
+#[derive(Parser)]
+/// The model generated is output to a directory with the same name as the model ID.
+/// For example, the model ID `username/model_name` will generate the quantizations to `model_name`.
+struct Args {
+    /// Model ID to generate the UQFF model for.
+    #[arg(short, long)]
+    model_id: String,
+
+    /// Template filename, roughly with the format: `[name][version]-[size]-[instruct?]-###.uqff`.
+    /// The ### will be automatically replaced with the quantization and must be specified.
+    #[arg(short, long)]
+    filename: String,
+
+    /// To quantize a vision model, you must specify this flag. See the mistral.rs docs:
+    /// https://ericlbuehler.github.io/mistral.rs/mistralrs/enum.VisionLoaderType.html
+    #[arg(short, long)]
+    vision_arch: Option<String>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    for (model, template) in TEXT_MODELS_TO_QUANTIZE {
-        println!("{}\n{model} \n{}", "=".repeat(20), "=".repeat(20));
+    let args = Args::parse();
+    let model = &args.model_id;
+    let template = &args.filename;
 
-        for quant in QUANTIZATIONS {
-            let dir = model.split('/').last().unwrap();
-            let uqff_file = format!(
-                "{dir}/{}",
-                template.replace("###", &format!("{quant:?}").to_lowercase())
-            );
+    println!("{}\n{model} \n{}", "=".repeat(20), "=".repeat(20));
 
-            std::fs::create_dir_all(&dir)?;
+    for quant in QUANTIZATIONS {
+        let dir = model.split('/').last().unwrap();
+        let uqff_file = format!(
+            "{dir}/{}",
+            template.replace("###", &format!("{quant:?}").to_lowercase())
+        );
 
-            println!(
-                "{}  Generating with quantization {quant:?} to {uqff_file}{}",
-                "\n".repeat(3),
-                "\n".repeat(3)
-            );
+        std::fs::create_dir_all(&dir)?;
 
-            let res = TextModelBuilder::new(model)
+        println!(
+            "{}  Generating with quantization {quant:?} to {uqff_file}{}",
+            "\n".repeat(3),
+            "\n".repeat(3)
+        );
+
+        let res = if let Some(vision_arch) = &args.vision_arch {
+            let ty = VisionLoaderType::from_str(vision_arch).map_err(anyhow::Error::msg)?;
+            VisionModelBuilder::new(model, ty)
                 .with_isq(*quant)
                 .write_uqff(uqff_file.into())
                 .with_logging()
                 .build()
-                .await;
+                .await
+        } else {
+            TextModelBuilder::new(model)
+                .with_isq(*quant)
+                .write_uqff(uqff_file.into())
+                .with_logging()
+                .build()
+                .await
+        };
 
-            match res {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("{}  Error! {e:?}\n", "\n".repeat(3));
-                }
+        match res {
+            Ok(_) => (),
+            Err(e) => {
+                println!("{}  Error! {e:?}\n", "\n".repeat(3));
             }
         }
     }
-
-    // for (model, template, tp) in VISION_MODELS_TO_QUANTIZE {
-    //     println!("{}\n{model} \n{}", "=".repeat(20), "=".repeat(20));
-
-    //     for quant in QUANTIZATIONS {
-    //         let dir = model.split('/').last().unwrap();
-    //         let uqff_file = format!(
-    //             "{dir}/{}",
-    //             template.replace("###", &format!("{quant:?}").to_lowercase())
-    //         );
-
-    //         std::fs::create_dir_all(&dir)?;
-
-    //         println!(
-    //             "{}  Generating with quantization {quant:?} to {uqff_file}{}",
-    //             "\n".repeat(3),
-    //             "\n".repeat(3)
-    //         );
-
-    //         let res = VisionModelBuilder::new(model, tp.clone())
-    //             .with_isq(*quant)
-    //             .write_uqff(uqff_file.into())
-    //             .with_logging()
-    //             .build()
-    //             .await;
-
-    //         match res {
-    //             Ok(_) => (),
-    //             Err(e) => {
-    //                 println!("{}  Error! {e:?}\n", "\n".repeat(3));
-    //             }
-    //         }
-    //     }
-    // }
 
     Ok(())
 }
