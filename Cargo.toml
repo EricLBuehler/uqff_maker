@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.89"
 clap = "4.5.21"
-mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git", version = "0.3.2" }
-tokio = "1.40.0"
+mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" }
+tokio = "1.44.0"
 
 [features]
 cuda = ["mistralrs/cuda"]
