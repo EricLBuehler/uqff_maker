@@ -50,6 +50,10 @@ struct Args {
     /// To quantize a vision model, add this flag.
     #[arg(short, long, value_enum)]
     vision: bool,
+
+    /// Directory to save the generated files. Defaults to model name.
+    #[arg(short = 'd', long)]
+    save_dir: Option<String>,
 }
 
 #[tokio::main]
@@ -60,7 +64,13 @@ async fn main() -> Result<()> {
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or(model_id);
-    let output_dir = PathBuf::from(model_name);
+
+    // Use save_dir as parent directory if provided, else current directory; model_name is always the subdirectory
+    let output_dir = if let Some(ref dir) = args.save_dir {
+        PathBuf::from(dir).join(model_name)
+    } else {
+        PathBuf::from(model_name)
+    };
     std::fs::create_dir_all(&output_dir)?;
 
     // Determine the template: use provided filename or derive from model_name
