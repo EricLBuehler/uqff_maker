@@ -6,18 +6,23 @@ use mistralrs::{IsqType, TextModelBuilder, VisionModelBuilder};
 
 // Names follow the format: [name][version]-[size]-[instruct?]-[quant].uqff
 
+#[cfg(feature = "cuda")]
 const QUANTIZATIONS: &[IsqType] = &[
     IsqType::Q2K,
     IsqType::Q3K,
     IsqType::Q4K,
     IsqType::Q5K,
     IsqType::Q8_0,
+    IsqType::F8E4M3,
+];
+
+#[cfg(not(feature = "cuda"))]
+const QUANTIZATIONS: &[IsqType] = &[
     IsqType::AFQ2,
     IsqType::AFQ3,
     IsqType::AFQ4,
     IsqType::AFQ6,
     IsqType::AFQ8,
-    IsqType::F8E4M3,
 ];
 
 fn default_template(model_name: &str) -> String {
