@@ -16,3 +16,15 @@ metal = ["mistralrs/metal"]
 flash-attn = ["cuda", "mistralrs/flash-attn"]
 accelerate = ["mistralrs/accelerate"]
 mkl = ["mistralrs/mkl"]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[profile.release]
+lto = true
+opt-level = 3
+
+[profile.dev]
+debug = true
+opt-level = 3
