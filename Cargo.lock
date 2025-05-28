@@ -2216,7 +2216,7 @@ dependencies = [
 [[package]]
 name = "mistralrs"
 version = "0.5.0"
-source = "git+https://github.com/EricLBuehler/mistral.rs.git#6e811f2e5d08efd0a68a832f9d889fabf19dc731"
+source = "git+https://github.com/EricLBuehler/mistral.rs.git#9d72f7da05d31ed32e8ac6183b824186a10b9653"
 dependencies = [
  "anyhow",
  "candle-core",
@@ -2237,7 +2237,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-core"
 version = "0.5.0"
-source = "git+https://github.com/EricLBuehler/mistral.rs.git#6e811f2e5d08efd0a68a832f9d889fabf19dc731"
+source = "git+https://github.com/EricLBuehler/mistral.rs.git#9d72f7da05d31ed32e8ac6183b824186a10b9653"
 dependencies = [
  "ahash",
  "akin",
@@ -2319,7 +2319,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-paged-attn"
 version = "0.5.0"
-source = "git+https://github.com/EricLBuehler/mistral.rs.git#6e811f2e5d08efd0a68a832f9d889fabf19dc731"
+source = "git+https://github.com/EricLBuehler/mistral.rs.git#9d72f7da05d31ed32e8ac6183b824186a10b9653"
 dependencies = [
  "anyhow",
  "bindgen_cuda 0.1.7",
@@ -2334,7 +2334,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-quant"
 version = "0.5.0"
-source = "git+https://github.com/EricLBuehler/mistral.rs.git#6e811f2e5d08efd0a68a832f9d889fabf19dc731"
+source = "git+https://github.com/EricLBuehler/mistral.rs.git#9d72f7da05d31ed32e8ac6183b824186a10b9653"
 dependencies = [
  "bindgen_cuda 0.1.5",
  "byteorder",
@@ -2361,7 +2361,7 @@ dependencies = [
 [[package]]
 name = "mistralrs-vision"
 version = "0.5.0"
-source = "git+https://github.com/EricLBuehler/mistral.rs.git#6e811f2e5d08efd0a68a832f9d889fabf19dc731"
+source = "git+https://github.com/EricLBuehler/mistral.rs.git#9d72f7da05d31ed32e8ac6183b824186a10b9653"
 dependencies = [
  "candle-core",
  "image",
