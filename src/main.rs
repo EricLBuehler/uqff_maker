@@ -4,6 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use dialoguer::{Confirm, Input};
 use mistralrs::{IsqType, TextModelBuilder, VisionModelBuilder};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -200,8 +201,8 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
                 }
             };
 
-            // Collect all `.uqff` files in the chosen directory
-            let mut files: Vec<PathBuf> = vec![];
+            // Collect and group `.uqff` files (group by prefix, ignoring trailing numeric suffix)
+            let mut groups: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
             for entry in std::fs::read_dir(&uqff_dir_path)? {
                 let entry = entry?;
                 if entry.file_type()?.is_file() {
@@ -211,38 +212,61 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
                         .and_then(|e| e.to_str())
                         .map_or(false, |e| e.eq_ignore_ascii_case("uqff"))
                     {
-                        files.push(path);
+                        // Derive grouping key: drop trailing numeric index if present
+                        let stem = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or_default();
+                        let key = if let Some((pre, suf)) = stem.rsplit_once('-') {
+                            if suf.chars().all(|c| c.is_ascii_digit()) {
+                                pre.to_string()
+                            } else {
+                                stem.to_string()
+                            }
+                        } else {
+                            stem.to_string()
+                        };
+                        groups.entry(key).or_default().push(path);
                     }
                 }
             }
-            files.sort();
 
-            // Iterate through each discovered file
-            for path in files {
+            // Iterate through each group (sorted by key)
+            for paths in groups.values() {
+                // Use the first file in the group as the representative example
+                let path = &paths[0];
                 let file = path
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or_default()
                     .to_string();
-                println!("Processing file: {}", file);
+                println!("Processing group: {}", file);
 
-                // Best‑guess quantization name based on the suffix before `.uqff`
-                let default_quant = path
+                // Guess quantization name (handle optional numeric suffix)
+                let stem = path
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .and_then(|stem| stem.rsplit_once('-').map(|(_, q)| q.to_uppercase()))
                     .unwrap_or_default();
+                let parts: Vec<&str> = stem.split('-').collect();
+                let default_quant = if parts.len() >= 2
+                    && parts.last().unwrap().chars().all(|c| c.is_ascii_digit())
+                {
+                    parts[parts.len() - 2].to_uppercase()
+                } else {
+                    parts.last().unwrap_or(&"").to_uppercase()
+                };
 
-                // Ask user for confirmation or override of the detected quant
+                // Ask user for confirmation or override
                 let quants_input: String = Input::new()
                     .with_prompt(format!(
-                        "Enter quantization NAMES used to make that file (default: {default_quant})"
+                        "Enter quantization NAMES used for files with prefix \"{}\" (default: {default_quant})",
+                        stem
                     ))
                     .allow_empty(true)
                     .interact_text()?;
 
                 let quants = if quants_input.trim().is_empty() {
-                    default_quant
+                    default_quant.clone()
                 } else {
                     quants_input.to_uppercase()
                 };
@@ -289,12 +313,18 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
             let out: String = Input::new()
                 .with_prompt("Enter the output filename")
                 .interact_text()?;
+            let out_path = if Path::new(&out).is_absolute() {
+                PathBuf::from(&out)
+            } else {
+                uqff_dir_path.join(&out)
+            };
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
-                .append(true)
-                .open(&out)?;
+                .write(true)
+                .truncate(true)
+                .open(&out_path)?;
             file.write_all(output.as_bytes())?;
-            println!("Model card written to {}", out);
+            println!("Model card written to {}", out_path.display());
             Ok(())
         }
     }
