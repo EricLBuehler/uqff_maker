@@ -233,17 +233,30 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
 
             // Iterate through each group (sorted by key)
             for paths in groups.values() {
-                // Use the first file in the group as the representative example
-                let path = &paths[0];
-                let file = path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or_default()
-                    .to_string();
-                println!("Processing group: {}", file);
+                // Use the first file in the group only for prefix/quant guessing,
+                // but keep *all* files for the command example.
+                let first_path = &paths[0];
 
-                // Guess quantization name (handle optional numeric suffix)
-                let stem = path
+                // Build semicolon‑separated, quoted list of all files in this group.
+                let files_vec: Vec<String> = paths
+                    .iter()
+                    .map(|p| {
+                        p.file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or_default()
+                            .to_string()
+                    })
+                    .collect();
+                let files_joined = if files_vec.len() == 1 {
+                    files_vec[0].clone()
+                } else {
+                    format!("\"{}\"", files_vec.join(";")) // quote multi‑file list
+                };
+
+                println!("Processing group: {}", files_joined);
+
+                // Guess quantization name (handle optional numeric suffix) using first file
+                let stem = first_path
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or_default();
@@ -277,15 +290,16 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
                     let topology: String = Input::new()
                         .with_prompt("Enter topology used to make UQFF with multiple quantizations")
                         .interact_text()?;
-                    topologies.insert(file.clone(), topology.clone());
+                    topologies.insert(files_joined.clone(), topology.clone());
                     output += &format!("|{} (see topology for this file)|", quants_vec.join(","));
                 } else {
                     output += &format!("|{}|", quants.trim());
                 }
 
                 let cmd = if is_vision { "vision-plain" } else { "plain" };
-                output +=
-                    &format!("`./mistralrs-server -i {cmd} -m {display_model_id} -f {file}`|\n");
+                output += &format!(
+                    "`./mistralrs-server -i {cmd} -m {display_model_id} -f {files_joined}`|\n"
+                );
 
                 n += 1;
             }
@@ -300,7 +314,7 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
                 for (name, file) in topologies {
                     let contents = std::fs::read_to_string(&file)
                         .unwrap_or_else(|_| "<Could not read topology file>".to_string());
-                    output += &format!("### Used for `{}`\n\n", name);
+                    output += &format!("### Used for `{}`\n\n", name.replace(';', "; \n"));
                     output += &format!("```yml\n{}\n```\n", contents);
                 }
             }
