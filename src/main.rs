@@ -2,7 +2,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
+use dialoguer::{Confirm, Input};
 use mistralrs::{IsqType, TextModelBuilder, VisionModelBuilder};
+use std::collections::HashMap;
+use std::io::Write;
 
 // Names follow the format: [name][version]-[size]-[instruct?]-[quant].uqff
 
@@ -33,6 +36,14 @@ fn default_template(model_name: &str) -> String {
 #[derive(Parser, Debug)]
 /// The model generated is output to a directory with the same name as the model ID.
 /// For example, the model ID `username/model_name` will generate the quantizations to `model_name`.
+enum Commands {
+    /// Generate UQFF models.
+    Quantize(Args),
+    /// Generate a Hugging Face model card for a UQFF model.
+    ModelCard,
+}
+
+#[derive(Parser, Debug)]
 struct Args {
     /// Model ID to generate the UQFF model for.
     #[arg(short, long)]
@@ -53,60 +64,226 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
-    let model_id = &args.model_id;
-    let model_name = Path::new(model_id)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(model_id);
+    let cli = Commands::parse();
 
-    // Use save_dir as parent directory if provided, else current directory; model_name is always the subdirectory
-    let output_dir = if let Some(ref dir) = args.save_dir {
-        PathBuf::from(dir).join(model_name)
-    } else {
-        PathBuf::from(model_name)
-    };
-    std::fs::create_dir_all(&output_dir)?;
+    match cli {
+        Commands::Quantize(args) => {
+            let model_id = &args.model_id;
+            let model_name = Path::new(model_id)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(model_id);
 
-    // Determine the template: use provided filename or derive from model_name
-    let template: String = if let Some(f) = &args.filename {
-        f.clone()
-    } else {
-        default_template(model_name)
-    };
+            // Use save_dir as parent directory if provided, else current directory; model_name is always the subdirectory
+            let output_dir = if let Some(ref dir) = args.save_dir {
+                PathBuf::from(dir).join(model_name)
+            } else {
+                PathBuf::from(model_name)
+            };
+            std::fs::create_dir_all(&output_dir)?;
 
-    println!("{}\n{model_id} \n{}", "=".repeat(20), "=".repeat(20));
+            // Determine the template: use provided filename or derive from model_name
+            let template: String = if let Some(f) = &args.filename {
+                f.clone()
+            } else {
+                default_template(model_name)
+            };
 
-    for quant in QUANTIZATIONS {
-        let filename = template.replace("###", &format!("{quant:?}").to_lowercase());
-        let uqff_path = output_dir.join(&filename);
+            println!("{}\n{model_id} \n{}", "=".repeat(20), "=".repeat(20));
 
-        println!(
-            "{}  Generating with quantization {quant:?} to {}{}",
-            "\n".repeat(3),
-            uqff_path.display(),
-            "\n".repeat(3)
-        );
+            for quant in QUANTIZATIONS {
+                let filename = template.replace("###", &format!("{quant:?}").to_lowercase());
+                let uqff_path = output_dir.join(&filename);
 
-        let result = if args.vision {
-            VisionModelBuilder::new(model_id)
-                .with_isq(*quant)
-                .write_uqff(uqff_path.clone().into())
-                .with_logging()
-                .build()
-                .await
-        } else {
-            TextModelBuilder::new(model_id)
-                .with_isq(*quant)
-                .write_uqff(uqff_path.clone().into())
-                .with_logging()
-                .build()
-                .await
-        };
-        if let Err(e) = result {
-            eprintln!("Error generating {}: {:?}", uqff_path.display(), e);
+                println!(
+                    "{}  Generating with quantization {quant:?} to {}{}",
+                    "\n".repeat(3),
+                    uqff_path.display(),
+                    "\n".repeat(3)
+                );
+
+                let result = if args.vision {
+                    VisionModelBuilder::new(model_id)
+                        .with_isq(*quant)
+                        .write_uqff(uqff_path.clone().into())
+                        .with_logging()
+                        .build()
+                        .await
+                } else {
+                    TextModelBuilder::new(model_id)
+                        .with_isq(*quant)
+                        .write_uqff(uqff_path.clone().into())
+                        .with_logging()
+                        .build()
+                        .await
+                };
+                if let Err(e) = result {
+                    eprintln!("Error generating {}: {:?}", uqff_path.display(), e);
+                }
+            }
+
+            Ok(())
+        }
+        Commands::ModelCard => {
+            // Model card generation logic (ported from Python)
+            let msg = "This script is used to generate a Hugging Face model card.";
+            println!("{}", "-".repeat(msg.len()));
+            println!("{}", msg);
+            println!("{}", "-".repeat(msg.len()));
+
+            let model_id: String = Input::new()
+                .with_prompt("Please enter the original model ID")
+                .interact_text()?;
+            let display_model_id: String = Input::new()
+                .with_prompt("Please enter the model ID where this model card will be displayed")
+                .interact_text()?;
+            let is_vision: bool = Confirm::new()
+                .with_prompt("Is this a vision model?")
+                .interact()?;
+
+            let mut output = format!(
+                r#"---
+tags:
+  - uqff
+  - mistral.rs
+base_model: {model_id}
+base_model_relation: quantized
+---
+
+<!-- Autogenerated from user input. -->
+
+"#,
+            );
+
+            output += &format!("# `{model_id}`, UQFF quantization\n\n");
+
+            output += r#"
+Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation: [UQFF docs](https://github.com/EricLBuehler/mistral.rs/blob/master/docs/UQFF.md).
+
+1) **Flexible** 🌀: Multiple quantization formats in *one* file format with *one* framework to run them all.
+2) **Reliable** 🔒: Compatibility ensured with *embedded* and *checked* semantic versioning information from day 1.
+3) **Easy** 🤗: Download UQFF models *easily* and *quickly* from Hugging Face, or use a local file.
+3) **Customizable** 🛠️: Make and publish your own UQFF files in minutes.
+"#;
+
+            println!(" NOTE: Getting metadata now, press CTRL-C when you have entered all files");
+            println!(" NOTE: If multiple quantizations were used: enter the quantization names, and then in the next prompt, the topology file used.");
+
+            output += "\n## Examples\n";
+            output += "|Quantization type(s)|Example|\n|--|--|\n";
+
+            let mut topologies: HashMap<String, String> = HashMap::new();
+            let mut n = 0;
+
+            // Prompt for directory containing UQFF files (defaults to current directory)
+            let uqff_dir: String = Input::new()
+                .with_prompt(
+                    "Enter the directory containing UQFF files (leave empty for current directory)",
+                )
+                .allow_empty(true)
+                .interact_text()?;
+            let uqff_dir_path = if uqff_dir.trim().is_empty() {
+                std::env::current_dir()?
+            } else {
+                PathBuf::from(uqff_dir.trim())
+            };
+
+            // Collect all `.uqff` files in the chosen directory
+            let mut files: Vec<PathBuf> = vec![];
+            for entry in std::fs::read_dir(&uqff_dir_path)? {
+                let entry = entry?;
+                if entry.file_type()?.is_file() {
+                    let path = entry.path();
+                    if path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .map_or(false, |e| e.eq_ignore_ascii_case("uqff"))
+                    {
+                        files.push(path);
+                    }
+                }
+            }
+            files.sort();
+
+            // Iterate through each discovered file
+            for path in files {
+                let file = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                println!("Processing file: {}", file);
+
+                // Best‑guess quantization name based on the suffix before `.uqff`
+                let default_quant = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .and_then(|stem| stem.rsplit_once('-').map(|(_, q)| q.to_uppercase()))
+                    .unwrap_or_default();
+
+                // Ask user for confirmation or override of the detected quant
+                let quants_input: String = Input::new()
+                    .with_prompt(format!(
+                        "Enter quantization NAMES used to make that file (default: {default_quant})"
+                    ))
+                    .allow_empty(true)
+                    .interact_text()?;
+
+                let quants = if quants_input.trim().is_empty() {
+                    default_quant
+                } else {
+                    quants_input.to_uppercase()
+                };
+
+                if quants.contains(',') {
+                    let quants_vec: Vec<String> =
+                        quants.split(',').map(|x| x.trim().to_uppercase()).collect();
+                    let topology: String = Input::new()
+                        .with_prompt("Enter topology used to make UQFF with multiple quantizations")
+                        .interact_text()?;
+                    topologies.insert(file.clone(), topology.clone());
+                    output += &format!("|{} (see topology for this file)|", quants_vec.join(","));
+                } else {
+                    output += &format!("|{}|", quants.trim());
+                }
+
+                let cmd = if is_vision { "vision-plain" } else { "plain" };
+                output +=
+                    &format!("`./mistralrs-server -i {cmd} -m {display_model_id} -f {file}`|\n");
+
+                n += 1;
+            }
+
+            if n == 0 {
+                eprintln!("Need at least one file");
+                return Ok(());
+            }
+
+            if !topologies.is_empty() {
+                output += "\n\n## Topologies\n**The following model topologies were used to generate this UQFF file. Only information pertaining to ISQ is relevant.**\n";
+                for (name, file) in topologies {
+                    let contents = std::fs::read_to_string(&file)
+                        .unwrap_or_else(|_| "<Could not read topology file>".to_string());
+                    output += &format!("### Used for `{}`\n\n", name);
+                    output += &format!("```yml\n{}\n```\n", contents);
+                }
+            }
+
+            let msg = "Done! Please enter the output filename";
+            println!("\n{}", "-".repeat(msg.len()));
+            println!("{}", msg);
+            println!("{}", "-".repeat(msg.len()));
+
+            let out: String = Input::new()
+                .with_prompt("Enter the output filename")
+                .interact_text()?;
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&out)?;
+            file.write_all(output.as_bytes())?;
+            println!("Model card written to {}", out);
+            Ok(())
         }
     }
-
-    Ok(())
 }

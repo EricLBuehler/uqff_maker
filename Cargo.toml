@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.89"
 clap = "4.5.21"
+dialoguer = "0.11.0"
 mistralrs = { git = "https://github.com/EricLBuehler/mistral.rs.git" }
 tokio = "1.44.0"
 
