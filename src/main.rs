@@ -40,7 +40,7 @@ enum Commands {
     /// Generate UQFF models.
     Quantize(Args),
     /// Generate a Hugging Face model card for a UQFF model.
-    ModelCard,
+    ModelCard(ModelCardArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -60,6 +60,14 @@ struct Args {
     /// Directory to save the generated files. Defaults to model name.
     #[arg(short = 'd', long)]
     save_dir: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+/// Arguments for the `modelcard` sub‑command.
+struct ModelCardArgs {
+    /// Directory containing UQFF files. If omitted, you will be prompted.
+    #[arg(short = 'w', long)]
+    work_dir: Option<String>,
 }
 
 #[tokio::main]
@@ -124,7 +132,9 @@ async fn main() -> Result<()> {
 
             Ok(())
         }
-        Commands::ModelCard => {
+        Commands::ModelCard(card_args) => {
+            // Optional working directory provided on the CLI
+            let work_dir_opt = card_args.work_dir.clone();
             // Model card generation logic (ported from Python)
             let msg = "This script is used to generate a Hugging Face model card.";
             println!("{}", "-".repeat(msg.len()));
@@ -175,17 +185,19 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
             let mut topologies: HashMap<String, String> = HashMap::new();
             let mut n = 0;
 
-            // Prompt for directory containing UQFF files (defaults to current directory)
-            let uqff_dir: String = Input::new()
-                .with_prompt(
-                    "Enter the directory containing UQFF files (leave empty for current directory)",
-                )
-                .allow_empty(true)
-                .interact_text()?;
-            let uqff_dir_path = if uqff_dir.trim().is_empty() {
-                std::env::current_dir()?
+            // Determine directory containing UQFF files
+            let uqff_dir_path = if let Some(ref dir) = work_dir_opt {
+                PathBuf::from(dir)
             } else {
-                PathBuf::from(uqff_dir.trim())
+                let uqff_dir: String = Input::new()
+                    .with_prompt("Enter the directory containing UQFF files (leave empty for current directory)")
+                    .allow_empty(true)
+                    .interact_text()?;
+                if uqff_dir.trim().is_empty() {
+                    std::env::current_dir()?
+                } else {
+                    PathBuf::from(uqff_dir.trim())
+                }
             };
 
             // Collect all `.uqff` files in the chosen directory
