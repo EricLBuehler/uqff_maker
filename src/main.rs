@@ -233,12 +233,22 @@ Run with [mistral.rs](https://github.com/EricLBuehler/mistral.rs). Documentation
 
             // Iterate through each group (sorted by key)
             for paths in groups.values() {
-                // Use the first file in the group only for prefix/quant guessing,
-                // but keep *all* files for the command example.
-                let first_path = &paths[0];
+                // Sort all files in the group by the trailing numeric suffix so they appear 0,1,2…
+                let mut paths_sorted = paths.clone();
+                paths_sorted.sort_by_key(|p| {
+                    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+                    if let Some((_, suf)) = stem.rsplit_once('-') {
+                        suf.parse::<u64>().unwrap_or(u64::MAX)
+                    } else {
+                        u64::MAX
+                    }
+                });
 
-                // Build semicolon‑separated, quoted list of all files in this group.
-                let files_vec: Vec<String> = paths
+                // Use the first file in the sorted list for prefix/quant guessing.
+                let first_path = &paths_sorted[0];
+
+                // Build semicolon‑separated, quoted list of all files in numeric order.
+                let files_vec: Vec<String> = paths_sorted
                     .iter()
                     .map(|p| {
                         p.file_name()
