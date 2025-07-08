@@ -10,7 +10,7 @@ cargo run --features ... -- quantize -m mistralai/Devstral-Small-2505
 # Make the model card
 cargo run --features ... -- model-card -w Devstral-Small-2505
 
-python3 upload.py -- --model-id mistralai/Devstral-Small-2505 --token ... --username ...
+python3 upload.py --model_id mistralai/Devstral-Small-2505 --token ... --username ...
 ```
 
 ## Example usage for a vision model
@@ -21,5 +21,5 @@ cargo run --features ... -- quantize -m google/gemma-3-4b-it --vision
 # Make the model card
 cargo run --features ... -- model-card -w gemma-3-4b-it
 
-python3 upload.py -- --model-id google/gemma-3-4b-it --token ... --username ...
+python3 upload.py --model_id google/gemma-3-4b-it --token ... --username ...
 ```
